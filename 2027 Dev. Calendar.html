@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise 2027 Calendar Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbars inside day blocks for clean multi-entry tracking */
+        .day-scroller::-webkit-scrollbar {
+            width: 3px;
+        }
+        .day-scroller::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 9px;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .month-card { page-break-inside: avoid; break-inside: avoid; border: 2px solid #cbd5e1 !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30 no-print">
+        <div class="max-w-[1600px] mx-auto px-6 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight">2027 Calendar Workspace</h1>
+                <p class="text-xs text-slate-400">Deep-cell agenda grid with multi-entry stacking and inspector popups.</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3 text-slate-900">
+                <input type="text" id="globalSearch" placeholder="Filter keyword..." 
+                       class="px-3 py-1.5 rounded-lg text-sm bg-white border-none focus:ring-2 focus:ring-blue-500 w-44">
+                
+                <select id="categoryFilter" class="px-3 py-1.5 rounded-lg text-sm bg-white border-none focus:ring-2 focus:ring-blue-500">
+                    <option value="all">All Entries</option>
+                    <option value="holiday">Holidays Only</option>
+                    <option value="user">User Tasks Only</option>
+                </select>
+
+                <select id="stateSelect" class="px-3 py-1.5 rounded-lg text-sm bg-white border-none focus:ring-2 focus:ring-blue-500">
+                    <option value="FL">Florida (FL)</option>
+                    <option value="CA">California (CA)</option>
+                    <option value="NY">New York (NY)</option>
+                    <option value="TX">Texas (TX)</option>
+                </select>
+
+                <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-1.5 rounded-lg transition">
+                    Print Sheet
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-[1600px] mx-auto px-6 mt-4 no-print">
+        <div class="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap gap-5 text-xs font-medium text-slate-600">
+            <span class="font-bold border-r pr-3 text-slate-400 uppercase">Keys</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-red-500"></span> Federal Holiday</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-blue-500"></span> State Holiday</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-green-500"></span> Observance</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-purple-600"></span> Your Entry (Multiple Colors)</span>
+        </div>
+    </div>
+
+    <main class="max-w-[1600px] mx-auto px-6 py-6">
+        <div id="calendarContainer" class="space-y-12">
+            </div>
+    </main>
+
+    <div id="dayModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center z-50 p-4 no-print">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <div>
+                    <h3 id="modalHeaderDate" class="text-lg font-bold text-slate-900">Date Title</h3>
+                    <p class="text-xs text-slate-400">View detailed descriptions or add new records below.</p>
+                </div>
+                <button onclick="closeDayModal()" class="text-slate-400 hover:text-slate-600 text-2xl font-semibold">&times;</button>
+            </div>
+
+            <div class="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Scheduled Actions</h4>
+                    <div id="modalEntriesInspector" class="space-y-2 max-h-[40vh] overflow-y-auto day-scroller pr-1">
+                        </div>
+                </div>
+
+                <div class="border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Add Entry</h4>
+                    <form id="entryForm" onsubmit="commitEntryForm(event)" class="space-y-3">
+                        <input type="hidden" id="targetIsoDate">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Title / Label</label>
+                            <input type="text" id="formTitle" required placeholder="Project Launch, Travel, Sync..."
+                                   class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Color Code</label>
+                            <div class="flex gap-2 flex-wrap">
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="purple" checked class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-purple-600"></span>
+                                    <span class="text-[10px]">Purple</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="red" class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-red-600"></span>
+                                    <span class="text-[10px]">Red</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="orange" class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-orange-500"></span>
+                                    <span class="text-[10px]">Orange</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="yellow" class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-yellow-500"></span>
+                                    <span class="text-[10px]">Yellow</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="green" class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-green-600"></span>
+                                    <span class="text-[10px]">Green</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="blue" class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-blue-600"></span>
+                                    <span class="text-[10px]">Blue</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="indigo" class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-indigo-600"></span>
+                                    <span class="text-[10px]">Indigo</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="colorCode" value="pink" class="w-4 h-4">
+                                    <span class="w-4 h-4 rounded bg-pink-600"></span>
+                                    <span class="text-[10px]">Pink</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Detailed Log / Descriptions</label>
+                            <textarea id="formNotes" rows="4" placeholder="Enter instructions, notes, or specific context details here..."
+                                      class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"></textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2 rounded-lg text-xs transition">
+                            Save Entry Record
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="inspectorPopup" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs hidden items-center justify-center z-50 p-4 no-print">
+        <div class="bg-white rounded-xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
+            <div class="flex justify-between items-start">
+                <span id="popupBadge" class="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded">Badge</span>
+                <button onclick="closeInspectorPopup()" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
+            </div>
+            <div>
+                <h4 id="popupTitle" class="text-base font-bold text-slate-900 mb-1">Activity Title</h4>
+                <p id="popupNotes" class="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100 whitespace-pre-wrap max-h-48 overflow-y-auto day-scroller">Notes detail stream...</p>
+            </div>
+            <div id="popupActionArea" class="flex justify-end pt-2">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        const CALENDAR_YEAR = 2027;
+        const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+        // Color mapping for user entries
+        const ColorMap = {
+            purple: { bg: "bg-purple-600", light: "bg-purple-50", text: "text-purple-900", border: "border-purple-200" },
+            red: { bg: "bg-red-600", light: "bg-red-50", text: "text-red-900", border: "border-red-200" },
+            orange: { bg: "bg-orange-600", light: "bg-orange-50", text: "text-orange-900", border: "border-orange-200" },
+            yellow: { bg: "bg-yellow-600", light: "bg-yellow-50", text: "text-yellow-900", border: "border-yellow-200" },
+            green: { bg: "bg-green-600", light: "bg-green-50", text: "text-green-900", border: "border-green-200" },
+            blue: { bg: "bg-blue-600", light: "bg-blue-50", text: "text-blue-900", border: "border-blue-200" },
+            indigo: { bg: "bg-indigo-600", light: "bg-indigo-50", text: "text-indigo-900", border: "border-indigo-200" },
+            pink: { bg: "bg-pink-600", light: "bg-pink-50", text: "text-pink-900", border: "border-pink-200" }
+        };
+
+        // Static Holiday Mapping Set Configuration
+        const CoreHolidays = {
+            "01-01": { title: "New Year's Day", type: "national", notes: "Federal National Holiday - Start of calendar fiscal year cycle." },
+            "01-18": { title: "Martin Luther King Jr. Day", type: "national", notes: "Federal National Holiday celebrating civil rights achievements." },
+            "02-14": { title: "Valentine's Day", type: "observance", notes: "Cultural celebration of romance and affection." },
+            "02-15": { title: "Presidents' Day", type: "national", notes: "Federal Holiday recognized on the third Monday of February." },
+            "03-26": { title: "Good Friday", type: "observance", notes: "Traditional Friday observation window preceding Easter Sunday." },
+            "03-28": { title: "Easter Sunday", type: "observance", notes: "Spring cultural observation." },
+            "05-09": { title: "Mother's Day", type: "observance", notes: "National observation honoring mothers." },
+            "05-31": { title: "Memorial Day", type: "national", notes: "Federal National Holiday honoring military personnel." },
+            "06-19": { title: "Juneteenth National Independence Day", type: "national", notes: "Federal holiday commemorating the emancipation of enslaved African Americans." },
+            "07-04": { title: "Independence Day", type: "national", notes: "U.S. National Independence Day celebration." },
+            "07-05": { title: "Independence Day (Observed)", type: "national", notes: "Federal Day-off observation window alignment." },
+            "09-06": { title: "Labor Day", type: "national", notes: "Federal holiday celebrating organized labor contributions." },
+            "10-11": { title: "Columbus Day", type: "national", notes: "Federal holiday acknowledging historical exploration frames." },
+            "10-31": { title: "Halloween", type: "observance", notes: "Evening cultural costuming custom events." },
+            "11-11": { title: "Veterans Day", type: "national", notes: "Federal holiday recognizing military veterans services." },
+            "11-25": { title: "Thanksgiving Day", type: "national", notes: "Federal Thanksgiving holiday observation." },
+            "12-25": { title: "Christmas Day", type: "national", notes: "Federal holiday honoring standard traditional winter celebrations." }
+        };
+
+        const RegionalHolidays = {
+            FL: { "01-19": { title: "Robert E. Lee Day", type: "state", notes: "State recognition designated window." }, "04-02": { title: "Pascua Florida Day", type: "state", notes: "Florida State foundational history reference." } },
+            CA: { "03-31": { title: "Cesar Chavez Day", type: "state", notes: "California State holiday acknowledging labor frameworks." } },
+            NY: { "02-12": { title: "Lincoln's Birthday", type: "state", notes: "Regional structural state observation window." } },
+            TX: { "03-02": { title: "Texas Independence Day", type: "state", notes: "State historical sovereignty benchmark acknowledgment." } }
+        };
+
+        // Core Reactive App States
+        let userDataStore = JSON.parse(localStorage.getItem('cal_2027_expanded_events')) || {};
+        let monthlyNotesStore = JSON.parse(localStorage.getItem('cal_2027_expanded_mNotes')) || {};
+        let activeStateSelect = document.getElementById('stateSelect').value;
+        let globalSearchQuery = "";
+        let globalFilterType = "all";
+
+        function getActiveHolidays() {
+            return { ...CoreHolidays, ...(RegionalHolidays[activeStateSelect] || {}) };
+        }
+
+        // Master View Matrix Generation Function
+        function renderExpandedCalendar() {
+            const container = document.getElementById('calendarContainer');
+            container.innerHTML = "";
+            const currentHolidays = getActiveHolidays();
+
+            for (let m = 0; m < 12; m++) {
+                const monthCard = document.createElement('div');
+                monthCard.className = "month-card bg-white border border-slate-200 shadow-md rounded-2xl p-6 flex flex-col";
+                
+                let html = `
+                    <div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 gap-2">
+                        <h2 class="text-xl font-bold text-slate-900">${MONTHS[m]} 2027</h2>
+                        <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">Standard Grid View</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500 mb-2">
+                        ${WEEKDAYS.map(w => `<div class="py-1 bg-slate-50 rounded">${w.substring(0, 3)}</div>`).join('')}
+                    </div>
+                    
+                    <div class="grid grid-cols-7 gap-2">
+                `;
+
+                const firstDayWeekdayIndex = new Date(CALENDAR_YEAR, m, 1).getDay();
+                const totalDaysInMonth = new Date(CALENDAR_YEAR, m + 1, 0).getDate();
+
+                // Generate structural alignment blank blocks
+                for (let i = 0; i < firstDayWeekdayIndex; i++) {
+                    html += `<div class="bg-slate-50/50 min-h-[140px] rounded-xl border border-slate-100 border-dashed"></div>`;
+                }
+
+                // Building Heavy Deep-Cells
+                for (let day = 1; day <= totalDaysInMonth; day++) {
+                    const mmdd = `${String(m+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const isoDate = `${CALENDAR_YEAR}-${mmdd}`;
+                    
+                    let itemsArray = [];
+                    if (currentHolidays[mmdd]) {
+                        itemsArray.push({ ...currentHolidays[mmdd], isHoliday: true });
+                    }
+                    if (userDataStore[isoDate]) {
+                        itemsArray.push(...userDataStore[isoDate].map((u, i) => ({ ...u, isUser: true, userIdx: i })));
+                    }
+
+                    // Apply layout processing filters
+                    const matchingItems = itemsArray.filter(item => {
+                        const passText = globalSearchQuery === "" || item.title.toLowerCase().includes(globalSearchQuery) || (item.notes && item.notes.toLowerCase().includes(globalSearchQuery));
+                        const passType = globalFilterType === "all" || (globalFilterType === "holiday" && item.isHoliday) || (globalFilterType === "user" && item.isUser);
+                        return passText && passType;
+                    });
+
+                    const hasMatches = matchingItems.length > 0;
+                    const cellBg = hasMatches ? 'bg-slate-50/80 border-slate-300' : 'bg-white border-slate-200';
+
+                    html += `
+                        <div class="min-h-[140px] max-h-[180px] border ${cellBg} rounded-xl p-2 flex flex-col justify-between hover:shadow-md hover:border-slate-400 transition group relative"
+                             onclick="handleCellClick(event, '${isoDate}')">
+                            
+                            <div class="flex items-center justify-between mb-1.5 shrink-0">
+                                <span class="text-sm font-bold ${hasMatches ? 'text-slate-900' : 'text-slate-600'}">${day}</span>
+                                <span class="opacity-0 group-hover:opacity-100 text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md font-bold transition no-print">＋ Add</span>
+                            </div>
+
+                            <div class="flex-1 overflow-y-auto day-scroller space-y-1 pr-0.5">
+                                ${matchingItems.map(item => {
+                                    let badgeColor = "bg-purple-600 text-white";
+                                    if (item.type === "national") badgeColor = "bg-red-500 text-white";
+                                    if (item.type === "state") badgeColor = "bg-blue-500 text-white";
+                                    if (item.type === "observance") badgeColor = "bg-green-500 text-white";
+                                    
+                                    // Use color code for user entries
+                                    if (item.isUser && item.colorCode) {
+                                        badgeColor = ColorMap[item.colorCode].bg + " text-white";
+                                    }
+                                    
+                                    return `
+                                        <div onclick="openInspectorPopup(event, '${escapeHtml(item.title)}', '${escapeHtml(item.notes || '')}', '${item.type}', ${item.isUser ? item.userIdx : -1}, '${isoDate}', '${item.colorCode || 'purple'}')"
+                                             class="${badgeColor} text-[10px] font-semibold px-2 py-1 rounded shadow-2xs truncate transition hover:brightness-95 flex items-center justify-between cursor-pointer">
+                                            <span class="truncate pr-1">${item.title}</span>
+                                            <span class="text-[8px] opacity-75 shrink-0">🔍</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const preservedNote = monthlyNotesStore[m] || "";
+                html += `
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-1.5 no-print">
+                        <label class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Monthly Directives Portfolio</label>
+                        <textarea oninput="commitMonthNote(${m}, this.value)" rows="2" placeholder="Input month logging parameters..."
+                                  class="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white resize-y transition-all">${preservedNote}</textarea>
+                    </div>
+                `;
+
+                monthCard.innerHTML = html;
+                container.appendChild(monthCard);
+            }
+        }
+
+        // Structural Router logic filtering Cell Clicks
+        function handleCellClick(event, isoDate) {
+            // Prevent event execution bubble when specific existing badge labels are directly selected
+            if (event.target.closest('[onclick^="openInspectorPopup"]')) return;
+            
+            document.getElementById('targetIsoDate').value = isoDate;
+            const [y, m, d] = isoDate.split('-');
+            document.getElementById('modalHeaderDate').innerText = `${MONTHS[parseInt(m)-1]} ${parseInt(d)}, 2027`;
+            
+            refreshModalInspectorList(isoDate);
+            
+            const modal = document.getElementById('dayModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeDayModal() {
+            document.getElementById('dayModal').classList.add('hidden');
+            document.getElementById('dayModal').classList.remove('flex');
+            document.getElementById('entryForm').reset();
+        }
+
+        // Refresh existing tasks lists rendered in modal container viewport
+        function refreshModalInspectorList(isoDate) {
+            const container = document.getElementById('modalEntriesInspector');
+            container.innerHTML = "";
+            
+            const mmdd = isoDate.substring(5);
+            const currentHolidays = getActiveHolidays();
+            let htmlPayload = "";
+
+            if (currentHolidays[mmdd]) {
+                const h = currentHolidays[mmdd];
+                let bCls = h.type === "national" ? "bg-red-50 text-red-800 border-red-200" : h.type === "state" ? "bg-blue-50 text-blue-800 border-blue-200" : "bg-green-50 text-green-800 border-green-200";
+                htmlPayload += `
+                    <div class="p-3 border rounded-xl ${bCls} text-xs">
+                        <div class="font-bold flex items-center justify-between">
+                            <span>🎁 [Holiday] ${h.title}</span>
+                            <span class="text-[9px] uppercase tracking-wider font-extrabold opacity-60">${h.type}</span>
+                        </div>
+                        ${h.notes ? `<p class="mt-1 text-[11px] opacity-90 leading-relaxed">${h.notes}</p>` : ''}
+                    </div>
+                `;
+            }
+
+            if (userDataStore[isoDate] && userDataStore[isoDate].length > 0) {
+                userDataStore[isoDate].forEach((entry, idx) => {
+                    const colors = ColorMap[entry.colorCode] || ColorMap.purple;
+                    htmlPayload += `
+                        <div class="p-3 border ${colors.border} ${colors.light} ${colors.text} rounded-xl text-xs space-y-1">
+                            <div class="font-bold flex justify-between items-start gap-2">
+                                <span class="truncate">${entry.title}</span>
+                                <button onclick="deleteEntryRecord(event, '${isoDate}', ${idx})" class="opacity-60 hover:opacity-100 font-bold px-1 transition">&times;</button>
+                            </div>
+                            ${entry.notes ? `<p class="text-[11px] whitespace-pre-wrap break-words opacity-90">${entry.notes}</p>` : ''}
+                        </div>
+                    `;
+                });
+            }
+
+            container.innerHTML = htmlPayload || `<div class="text-xs text-slate-400 italic py-4 text-center">No structural entries logged for this date framework.</div>`;
+        }
+
+        // Pop Up Window Detailed Inspector Controls
+        function openInspectorPopup(event, title, notes, type, userIdx, isoDate, colorCode) {
+            event.stopPropagation();
+            
+            const popup = document.getElementById('inspectorPopup');
+            const badge = document.getElementById('popupBadge');
+            
+            document.getElementById('popupTitle').innerText = title;
+            document.getElementById('popupNotes').innerText = notes || "No additional logs or descriptions attached.";
+            
+            // Badge color categorization mapping switch
+            badge.innerText = type;
+            badge.className = "text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded text-white ";
+            if (type === "national") badge.className += "bg-red-500";
+            else if (type === "state") badge.className += "bg-blue-500";
+            else if (type === "observance") badge.className += "bg-green-500";
+            else badge.className += (ColorMap[colorCode] ? ColorMap[colorCode].bg : "bg-purple-600");
+
+            const actionsArea = document.getElementById('popupActionArea');
+            if (userIdx !== -1) {
+                actionsArea.innerHTML = `
+                    <button onclick="deleteEntryRecord(event, '${isoDate}', ${userIdx}); closeInspectorPopup();" 
+                            class="bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs px-3 py-1.5 rounded-lg transition">
+                        Delete Activity
+                    </button>
+                `;
+            } else {
+                actionsArea.innerHTML = `<span class="text-[10px] text-slate-400 font-medium italic">Read-Only Holiday Profile</span>`;
+            }
+
+            popup.classList.remove('hidden');
+            popup.classList.add('flex');
+        }
+
+        function closeInspectorPopup() {
+            document.getElementById('inspectorPopup').classList.add('hidden');
+            document.getElementById('inspectorPopup').remove('flex');
+        }
+
+        // Storage mutation commit systems
+        function commitEntryForm(e) {
+            e.preventDefault();
+            const dateKey = document.getElementById('targetIsoDate').value;
+            const title = document.getElementById('formTitle').value.trim();
+            const notes = document.getElementById('formNotes').value.trim();
+            const colorCode = document.querySelector('input[name="colorCode"]:checked').value;
+
+            if (!userDataStore[dateKey]) userDataStore[dateKey] = [];
+            userDataStore[dateKey].push({ title, notes, type: 'user', colorCode });
+            
+            localStorage.setItem('cal_2027_expanded_events', JSON.stringify(userDataStore));
+            
+            refreshModalInspectorList(dateKey);
+            document.getElementById('entryForm').reset();
+            renderExpandedCalendar();
+        }
+
+        function deleteEntryRecord(event, dateKey, idx) {
+            if(event) event.stopPropagation();
+            
+            userDataStore[dateKey].splice(idx, 1);
+            if (userDataStore[dateKey].length === 0) delete userDataStore[dateKey];
+            
+            localStorage.setItem('cal_2027_expanded_events', JSON.stringify(userDataStore));
+            
+            if (document.getElementById('dayModal').classList.contains('flex')) {
+                refreshModalInspectorList(dateKey);
+            }
+            renderExpandedCalendar();
+        }
+
+        function commitMonthNote(mIdx, payload) {
+            monthlyNotesStore[mIdx] = payload;
+            localStorage.setItem('cal_2027_expanded_mNotes', JSON.stringify(monthlyNotesStore));
+        }
+
+        // Functional HTML escape helper matching string parsing constraints
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Input Filtering Listeners
+        document.getElementById('globalSearch').addEventListener('input', (e) => {
+            globalSearchQuery = e.target.value.toLowerCase().trim();
+            renderExpandedCalendar();
+        });
+        document.getElementById('categoryFilter').addEventListener('change', (e) => {
+            globalFilterType = e.target.value;
+            renderExpandedCalendar();
+        });
+        document.getElementById('stateSelect').addEventListener('change', (e) => {
+            activeStateSelect = e.target.value;
+            renderExpandedCalendar();
+        });
+
+        // Initialize Core View
+        renderExpandedCalendar();
+    </script>
+</body>
+</html>
